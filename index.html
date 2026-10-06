@@ -312,6 +312,13 @@ button{cursor:pointer;touch-action:manipulation}
   .mybar .av .face{width:36px;height:36px;font-size:16px}
   .btn{min-height:40px}
 }
+html{background:#0B1230}
+@media (display-mode: standalone){
+  :root{padding:0}
+  html,body{height:100%;min-height:100%}
+  #root{position:fixed;left:0;right:0;top:0;bottom:0;height:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .game,.start{height:100%}
+}
 </style>
 </head>
 <body>
