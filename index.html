@@ -1978,10 +1978,24 @@ function lostHTML(){
   return '<div class="overlay"><div class="sheet" role="dialog" aria-label="Sin conexión"><h2>Sin conexión</h2><p class="sub">Se perdió la conexión con el anfitrión: puede que haya cerrado el juego o se quedó sin señal. Si vuelve, la partida sigue sola.</p>'+
     '<button class="btn pri" data-act="home">Salir de la mesa</button><button class="btn" data-act="close">Esperar</button></div></div>';
 }
+function diagHTML(){
+  const pr=function(css){const d=document.createElement('div');d.style.cssText='position:fixed;left:0;top:0;width:1px;visibility:hidden;'+css;document.body.appendChild(d);const h=d.offsetHeight;d.remove();return h;};
+  const vv=window.visualViewport||{};const r=$('root').getBoundingClientRect();
+  const meta=(document.querySelector('meta[name=apple-mobile-web-app-status-bar-style]')||{}).content;
+  const rows=[['innerHeight',innerHeight],['outerHeight',outerHeight],['clientHeight',document.documentElement.clientHeight],['visualViewport',Math.round(vv.height||0)+' / top '+Math.round(vv.offsetTop||0)],
+    ['screen',screen.width+' x '+screen.height],['100vh',pr('height:100vh')],['100dvh',pr('height:100dvh')],['100lvh',pr('height:100lvh')],['100svh',pr('height:100svh')],
+    ['safe arriba',pr('height:env(safe-area-inset-top,0px)')],['safe abajo',pr('height:env(safe-area-inset-bottom,0px)')],
+    ['root',Math.round(r.top)+' a '+Math.round(r.bottom)],['standalone',String(!!navigator.standalone)+' / '+String(!!(window.matchMedia&&matchMedia('(display-mode: standalone)').matches))],
+    ['clase',document.documentElement.className||'-'],['barra',meta],['versión','6'],['navegador',navigator.userAgent.replace(/^Mozilla\/5\.0 /,'').slice(0,90)]];
+  return '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-label="Medidas"><h2>Medidas</h2><p class="sub">Toma una captura de esta pantalla y envíala.</p>'+
+    rows.map(x=>'<div class="rrow" style="padding:5px 0"><div class="l1"><span class="nm" style="font-size:14px">'+esc(x[0])+'</span><b style="font-size:14px;white-space:normal;text-align:right;max-width:65%">'+esc(String(x[1]))+'</b></div></div>').join('')+
+    '<button class="btn pri" data-act="close">Cerrar</button></div></div>';
+}
 function menuHTML(){
   return '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-label="Menú"><h2>Pausa</h2><p class="sub">'+(MP.role?'Mesa '+esc(MP.code)+(MP.role==='host'?'. Si sales, se cierra la mesa para todos.':'. Si sales, una computadora juega por ti.'):'La partida se guarda al terminar cada ronda.')+'</p>'+
   '<button class="btn" data-act="rules">Cómo se juega</button>'+
   '<button class="btn" data-act="lift">'+(UI.cfg.lift?'Mano más arriba: activado':'Mano más arriba: desactivado')+'</button>'+
+  '<button class="btn" data-act="diag">Medidas de pantalla</button>'+
   '<button class="btn" data-act="home">'+(MP.role?'Salir de la mesa':'Salir al inicio')+'</button>'+
   '<button class="btn pri" data-act="close">Seguir jugando</button></div></div>';
 }
@@ -2015,6 +2029,7 @@ function modalHTML(){
   if(t==='info')return infoHTML();
   if(t==='swap')return swapHTML();
   if(t==='lost')return lostHTML();
+  if(t==='diag')return diagHTML();
   return summaryHTML();
 }
 function modalKey(){if(!UI.modal)return '';const t=UI.modal.type;return t+(G&&(t==='round'||t==='final'||t==='info')?':'+G.round+':'+(UI.modal.wait?'w':'h'):'')+(t==='swap'&&UI.swap?':'+UI.swap.mi+UI.swap.ids.join(''):'');}
@@ -2140,6 +2155,7 @@ document.addEventListener('click',function(e){
     case 'rules':UI.prevModal=UI.modal&&['rules','menu','info'].indexOf(UI.modal.type)<0?UI.modal:null;UI.modal={type:'rules'};render();break;
     case 'info':UI.modal={type:'info'};render();break;
     case 'menu':UI.modal={type:'menu'};render();break;
+    case 'diag':UI.modal={type:'diag'};UI.mk=null;render();break;
     case 'lift':UI.cfg.lift=!UI.cfg.lift;saveCfg();UI.mk=null;render();break;
     case 'mute':MUTE=!MUTE;if(!MUTE){unlocked=false;unlockAudio();}try{localStorage.setItem(SAVE_KEY+'-mute',MUTE?'1':'0');}catch(err){}if(!MUTE)sfx('turn');render();break;
     case 'close':UI.swap=null;UI.modal=UI.prevModal||null;UI.prevModal=null;render();break;
