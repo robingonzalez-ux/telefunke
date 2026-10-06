@@ -313,14 +313,13 @@ button{cursor:pointer;touch-action:manipulation}
   .btn{min-height:40px}
 }
 html{background:#0B1230}
-@media (display-mode: standalone){
-  :root{padding:0}
-  html,body{height:100%;min-height:100%}
-  #root{position:fixed;left:0;right:0;top:0;bottom:0;height:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-  .game,.start{height:100%}
-  .lift .game{padding-bottom:0}
-  .topbar{padding-top:10px}
-}
+html.pwa,html.pwa:root{padding:0}
+html.pwa,html.pwa body{height:100%;min-height:100%;background:#0B1230}
+html.pwa #root{position:fixed;left:0;right:0;top:0;bottom:0;height:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html.pwa .game,html.pwa .start{height:100%}
+html.pwa .lift .game{padding-bottom:0}
+html.pwa .topbar{padding-top:10px}
+html.pwa .hz{margin-top:auto}
 </style>
 </head>
 <body>
@@ -353,6 +352,7 @@ safe-buffer/index.js:
 <script>
 (function(){
 'use strict';
+try{if((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone)document.documentElement.classList.add('pwa');}catch(e){}
 const SAVE_KEY='telefunke-juego-v1';
 const SUITS=['s','h','d','c'];
 const SYM={s:'♠',h:'♥',d:'♦',c:'♣'};
@@ -1873,7 +1873,7 @@ function handLayout(n){
   let W=390,VH=760;
   try{const e=document.documentElement;if(e&&e.clientWidth){W=Math.min(520,e.clientWidth);VH=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||e.clientHeight||VH;}}catch(e){}
   if(UI.cfg.lift)VH-=64;
-  const short=VH<600,top=short?16:24,pad=short?8:22;
+  const pwa=document.documentElement.classList.contains('pwa'),short=VH<600,top=short?16:24,pad=(short||pwa)?6:22;
   W-=16;
   const rows=n>10?2:1;
   const cw=Math.round(Math.max(46,Math.min(66,W/6.3,VH*(rows===2?.075:.085))));
