@@ -21,6 +21,7 @@
   --text:#F7F3E6; --muted:#B9C1E8; --ivory:#FCF8EE; --yellow:#F5BC0F; --yellow-ink:#2B2000;
   --red:#D0132F; --ink:#14161F; --ok:#52D38C; --glass:rgba(6,11,44,.55); --line:rgba(255,255,255,.18);
   --sheet:#FBF7EC; --sheet-ink:#141A44; --sheet-muted:#5B6287; --sheet-line:#DCD6C2;
+  --H:calc(var(--appH,100%) - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
   --display:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
   --body:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;
   box-sizing:border-box;
@@ -41,8 +42,8 @@ body{margin:0;color:var(--text);font-family:var(--body);font-size:16px;line-heig
 button,input{font:inherit;color:inherit}
 button{cursor:pointer;touch-action:manipulation}
 :focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
-#root{height:var(--appH,100%)}
-.game{height:var(--appH,100%);max-width:520px;margin:0 auto;display:flex;flex-direction:column;position:relative}
+#root{height:var(--H)}
+.game{height:var(--H);max-width:520px;margin:0 auto;display:flex;flex-direction:column;position:relative}
 
 /* top bar */
 .topbar{display:flex;align-items:center;gap:8px;padding:8px 10px 6px}
@@ -240,8 +241,8 @@ button{cursor:pointer;touch-action:manipulation}
   .btn{min-height:36px;font-size:14px}
 }
 /* start */
-.start{height:var(--appH,100%);max-width:520px;margin:0 auto;overflow-y:auto;position:relative}.start,.melds,.sheet{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}.start::-webkit-scrollbar,.melds::-webkit-scrollbar,.sheet::-webkit-scrollbar{width:6px;height:6px}.start::-webkit-scrollbar-track,.melds::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track{background:transparent}.start::-webkit-scrollbar-thumb,.melds::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:3px}
-.start .in{padding:22px 20px 26px;position:relative}
+.start{height:var(--H);max-width:520px;margin:0 auto;overflow-y:auto;position:relative}.start,.melds,.sheet{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}.start::-webkit-scrollbar,.melds::-webkit-scrollbar,.sheet::-webkit-scrollbar{width:6px;height:6px}.start::-webkit-scrollbar-track,.melds::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track{background:transparent}.start::-webkit-scrollbar-thumb,.melds::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22);border-radius:3px}
+.start .in{padding:22px 20px 44px;position:relative}
 .hero{position:relative;height:190px;margin:0 0 6px}
 .hero .pc{position:absolute;--cw:74px;left:50%;top:26px;transform-origin:50% 130%}
 .logo{font-family:var(--display);font-weight:800;font-size:78px;line-height:.86;margin:0;text-align:center;letter-spacing:.005em;
