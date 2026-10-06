@@ -318,6 +318,8 @@ html{background:#0B1230}
   html,body{height:100%;min-height:100%}
   #root{position:fixed;left:0;right:0;top:0;bottom:0;height:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
   .game,.start{height:100%}
+  .lift .game{padding-bottom:0}
+  .topbar{padding-top:10px}
 }
 </style>
 </head>
@@ -631,6 +633,7 @@ UI.saved=loadSaved();
 try{const c=JSON.parse(localStorage.getItem(SAVE_KEY+'-cfg')||'null');if(c){if(!c.v){c.time=0;c.v=2;}Object.assign(UI.cfg,c);}}catch(e){}
 if(UI.cfg.lift==null){try{UI.cfg.lift=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);}catch(e){UI.cfg.lift=false;}}
 try{MUTE=localStorage.getItem(SAVE_KEY+'-mute')==='1';}catch(e){}
+try{if((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone)UI.cfg.lift=false;}catch(e){}
 function saveCfg(){try{localStorage.setItem(SAVE_KEY+'-cfg',JSON.stringify(UI.cfg));}catch(e){}}
 function initials(n){const w=n.replace(/^(Doña|Don|Tío|La|Mamita)\s+/,'').trim();return (w[0]||'?').toUpperCase()+(w.split(/\s+/)[1]?w.split(/\s+/)[1][0].toUpperCase():(w[1]||''));}
 
