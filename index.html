@@ -370,7 +370,7 @@ safe-buffer/index.js:
 <script>
 (function(){
 'use strict';
-const APP_VER='20261008-7';
+const APP_VER='20261009-1';
 // Busca una versión más nueva en el servidor (el teléfono a veces guarda la vieja) y la carga sola.
 function checkUpdate(){
   if(location.protocol.indexOf('http')!==0||(typeof G!=='undefined'&&G))return;
@@ -2095,7 +2095,7 @@ function chatLogHTML(){
 function menuHTML(){
   return '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-label="Menú"><h2>Pausa</h2><p class="sub">'+(MP.role?'Mesa '+esc(MP.code)+(MP.role==='host'?'. Si sales, se cierra la mesa para todos.':'. Si sales, una computadora juega por ti.'):'La partida se guarda al terminar cada ronda.')+'</p>'+
   '<button class="btn" data-act="rules">Cómo se juega</button>'+
-  '<button class="btn" data-act="lift">'+(UI.cfg.lift?'Mano más arriba: activado':'Mano más arriba: desactivado')+'</button>'+
+  (window.self!==window.top?'<button class="btn" data-act="lift">'+(UI.cfg.lift?'Mano más arriba: activado':'Mano más arriba: desactivado')+'</button>':'')+
   '<button class="btn" data-act="home">'+(MP.role?'Salir de la mesa':'Salir al inicio')+'</button>'+
   '<button class="btn pri" data-act="close">Seguir jugando</button><p class="hint" style="text-align:center;color:var(--sheet-muted)">Versión '+APP_VER+'</p></div></div>';
 }
