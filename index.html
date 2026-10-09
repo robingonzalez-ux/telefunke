@@ -305,6 +305,10 @@ button{cursor:pointer;touch-action:manipulation}
 .chatrow input{flex:1;min-width:0;border:0;border-radius:14px;padding:12px 14px;font-size:16px;color:var(--sheet-ink);background:rgba(0,0,0,.05);box-shadow:inset 0 0 0 1.5px var(--sheet-line);user-select:text;-webkit-user-select:text}
 .chatrow .btn{width:auto!important;flex:none!important;margin-top:0!important;padding:0 18px;min-height:48px!important}
 @media (max-width:400px){.rpill .dots{display:none}}
+.hz .pc{touch-action:none}
+.hz .pc.dragsrc{opacity:.3}
+.dragghost{position:fixed;z-index:40;pointer-events:none;display:flex;transform:translate(-50%,-75%) rotate(-5deg);filter:drop-shadow(0 12px 18px rgba(0,0,0,.6))}
+.droptgt{box-shadow:0 0 0 3px var(--yellow),0 0 22px 4px rgba(245,188,15,.55)!important;border-radius:12px}
 @keyframes spin{to{rotate:360deg}}
 @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -5px}}
 @keyframes glow{0%,100%{box-shadow:0 4px 0 #B88700,0 0 0 0 rgba(245,188,15,.7)}50%{box-shadow:0 4px 0 #B88700,0 0 0 9px rgba(245,188,15,0)}}
@@ -1973,7 +1977,7 @@ function rulesHTML(){
   return '<div class="overlay" data-act="close"><div class="sheet rules" role="dialog" aria-label="Reglas"><h2>Cómo se juega</h2>'+
   '<p>Tres barajas con sus comodines, 162 cartas. Cada jugador recibe 11 cartas y sus fichas para toda la partida. Gana quien sume menos puntos al terminar las siete rondas.</p>'+
   '<h3>Los siete juegos</h3><ol>'+CONTRACTS.map(k=>'<li><b>'+k.n+'.</b> '+k.d+'</li>').join('')+'</ol>'+
-  '<h3>Tu turno</h3><p>Toca el mazo para robar. Elige cartas de tu mano y toca <b>Bajar juego</b>: la primera vez tiene que ser exactamente el juego de la ronda. Ya bajado, elige una carta y toca un juego de la mesa para agregarla, o baja juegos nuevos de 3 o más cartas. En el turno en que bajas solo puedes agregar a los juegos de los demás; desde tu siguiente turno, a cualquiera, también a los tuyos. Terminas descartando una carta. Los comodines no se descartan: solo se usan en juegos. Si solo te quedan comodines y no entran en la mesa, pasas el turno.</p>'+
+  '<h3>Tu turno</h3><p><b>Con el dedo:</b> arrastra el mazo hacia tu mano para robar; arrastra cartas de tu mano a un juego de la mesa para agregarlas, al descarte para descartar, o a la mesa para bajar un juego. Si eliges varias cartas antes, se mueven juntas.</p><p>Toca el mazo para robar. Elige cartas de tu mano y toca <b>Bajar juego</b>: la primera vez tiene que ser exactamente el juego de la ronda. Ya bajado, elige una carta y toca un juego de la mesa para agregarla, o baja juegos nuevos de 3 o más cartas. En el turno en que bajas solo puedes agregar a los juegos de los demás; desde tu siguiente turno, a cualquiera, también a los tuyos. Terminas descartando una carta. Los comodines no se descartan: solo se usan en juegos. Si solo te quedan comodines y no entran en la mesa, pasas el turno.</p>'+
   '<p>El trío limpio (ronda 1) debe armarse sin comodín y con tres palos distintos. Ya bajado, se le pueden agregar cartas del mismo valor de cualquier palo.</p>'+
   '<p><b>Tres o cuatro comodines:</b> si tienes tres o cuatro comodines, valen como el juego de cualquier ronda. Los bajas en lugar del juego y quedan solos en la mesa, sin que nadie les agregue cartas.</p>'+
   '<h3>Comprar</h3><p>Mientras no hayas bajado, puedes comprar la carta que acaba de descartar otro jugador, y también la primera carta que se voltea al repartir. Cuesta una ficha y te llevas además dos cartas del mazo. El derecho de compra va en orden: primero el jugador que sigue, a la derecha, y así sucesivamente. En la primera ronda no se compra.</p>'+
@@ -2157,6 +2161,80 @@ if(typeof window!=='undefined'&&window.addEventListener){
   window.addEventListener('resize',onRz);
   if(window.visualViewport&&window.visualViewport.addEventListener)window.visualViewport.addEventListener('resize',onRz);
 }
+
+// ---------- arrastrar con el dedo ----------
+// Arrastra cartas de tu mano: a un juego de la mesa (agregar), al descarte (descartar) o a la mesa (bajar).
+// Arrastra el mazo hacia tu mano para robar.
+let DR=null,DR_SUPPRESS=0;
+function drClear(){
+  if(!DR)return;
+  if(DR.ghost)DR.ghost.remove();
+  document.querySelectorAll('.droptgt').forEach(e=>e.classList.remove('droptgt'));
+  document.querySelectorAll('.dragsrc').forEach(e=>e.classList.remove('dragsrc'));
+  DR=null;
+}
+function drTarget(x,y){
+  const el=document.elementFromPoint(x,y);if(!el)return null;
+  if(DR.kind==='stock'){const t=el.closest('.hz,.mybar,.acts');return t?{k:'draw',el:document.querySelector('.hz')}:null;}
+  const m=el.closest('.meld');if(m)return {k:'meld',el:m,i:Number(m.dataset.i)};
+  const d=el.closest('#discard,.dpile');if(d)return {k:'disc',el:d};
+  const t=el.closest('.table');if(t)return {k:'lay',el:document.querySelector('.melds')||t};
+  return null;
+}
+document.addEventListener('pointerdown',function(e){
+  if(!G||G.over||UI.modal||UI.buy)return;
+  if(e.button!=null&&e.button>0)return;
+  const c=e.target.closest&&e.target.closest('.hz .pc[data-id]');
+  if(c&&myTurn('play')){DR={kind:'card',id:c.dataset.id,x0:e.clientX,y0:e.clientY,on:false};return;}
+  const st=e.target.closest&&e.target.closest('#stock');
+  if(st&&myTurn('draw')){DR={kind:'stock',x0:e.clientX,y0:e.clientY,on:false};}
+},{passive:true});
+document.addEventListener('pointermove',function(e){
+  if(!DR)return;
+  const dx=e.clientX-DR.x0,dy=e.clientY-DR.y0;
+  if(!DR.on){
+    if(Math.hypot(dx,dy)<14)return;
+    if(DR.kind==='card'&&dy>-6){DR=null;return;}
+    if(DR.kind==='stock'&&dy<6){DR=null;return;}
+    DR.on=true;
+    let html='';
+    if(DR.kind==='card'){
+      const ids=UI.sel.has(DR.id)?Array.from(UI.sel):[DR.id];
+      DR.ids=ids;
+      const cards=me().hand.filter(c=>ids.indexOf(c.id)>=0).slice(0,6);
+      html=cards.map((c,k)=>cardHTML(c,{style:'--cw:52px;'+(k?'margin-left:-30px':'')})).join('');
+      ids.forEach(id=>{const el=document.querySelector('.hz [data-id="'+id+'"]');if(el)el.classList.add('dragsrc');});
+    }else html='<span class="back" style="display:block;width:52px;height:73px"></span>';
+    const g=document.createElement('div');g.className='dragghost';g.innerHTML=html;document.body.appendChild(g);DR.ghost=g;
+    sfx('tick');buzz(6);
+  }
+  DR.ghost.style.left=e.clientX+'px';DR.ghost.style.top=e.clientY+'px';
+  const t=drTarget(e.clientX,e.clientY);
+  document.querySelectorAll('.droptgt').forEach(x=>{if(!t||x!==t.el)x.classList.remove('droptgt');});
+  if(t&&t.el)t.el.classList.add('droptgt');
+},{passive:true});
+function drEnd(e,cancel){
+  if(!DR)return;
+  const d=DR,t=(!cancel&&d.on)?drTarget(e.clientX,e.clientY):null;
+  const was=d.on;drClear();
+  if(!was)return;
+  DR_SUPPRESS=Date.now();
+  if(!t){render();return;}
+  if(t.k==='draw'){humanDraw();return;}
+  UI.sel=new Set(d.ids);
+  if(t.k==='meld'){humanExtend(t.i);return;}
+  if(t.k==='disc'){
+    if(d.ids.length!==1){setMsg('Para descartar arrastra una sola carta.',true);return render();}
+    humanDiscard();return;
+  }
+  if(t.k==='lay'){
+    if(d.ids.length<3&&me().melded){setMsg('Para bajar un juego arrastra 3 o más cartas. Para agregar una carta, suéltala sobre un juego de la mesa.',true);return render();}
+    humanLay();return;
+  }
+}
+document.addEventListener('pointerup',function(e){drEnd(e,false);},{passive:true});
+document.addEventListener('pointercancel',function(e){drEnd(e,true);},{passive:true});
+document.addEventListener('click',function(e){if(Date.now()-DR_SUPPRESS<400){e.stopPropagation();e.preventDefault();}},true);
 
 // ---------- eventos ----------
 document.addEventListener('input',function(e){
