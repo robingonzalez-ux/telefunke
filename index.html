@@ -850,13 +850,14 @@ function botPlay(p){
   const i=G.players.indexOf(p);
   const placed=[];let didContract=false;
   if(!p.melded){
-    const m=findContract(p.hand,G.round);
+    let m=findContract(p.hand,G.round);
+    if(m&&!canLeave(p,m.reduce((a,x)=>a.concat(cardsOf(x)),[])))m=null;
     if(m){layMelds(p,m,true);didContract=true;m.forEach(x=>cardsOf(x).forEach(c=>placed.push(c)));}
   }
   let off=0,grp=0,swaps=0;
   if(p.melded){
     let changed=true,guard=0;
-    while(changed&&guard++<40&&p.hand.length){
+    while(changed&&guard++<40&&p.hand.length>1){
       changed=false;
       if(jokerClose(p)){
         const jc=jokerClose(p);
@@ -871,7 +872,7 @@ function botPlay(p){
         if(m.kind!=='set'||m.triple||!m.cards.some(x=>x.j))continue;
         if(G.players[m.owner]===p&&p.meldTurn===G.turnNo)continue;
         const two=p.hand.filter(c=>!c.j&&c.r===m.rank).slice(0,2);
-        if(two.length<2)continue;
+        if(two.length<2||!canLeave(p,two))continue;
         const sw=trySwap(m,two);if(!sw)continue;
         const h2=p.hand.filter(c=>two.indexOf(c)<0).concat([sw.joker]);
         const g=extraGroup(h2);
@@ -885,14 +886,14 @@ function botPlay(p){
       for(const c of order){
         let done=false;
         for(let mi=0;mi<G.melds.length;mi++){
-          const nx=canExtend(p,G.melds[mi],c);
+          const nx=canLeave(p,[c])?canExtend(p,G.melds[mi],c):null;
           if(nx){G.melds[mi]=Object.assign({},G.melds[mi],nx);removeCards(p,[c]);placed.push(c);off++;done=true;break;}
         }
         if(done){changed=true;break;}
       }
       if(changed)continue;
       const g=extraGroup(p.hand);
-      if(g){layMelds(p,[g],false);cardsOf(g).forEach(c=>placed.push(c));grp++;changed=true;}
+      if(g&&canLeave(p,cardsOf(g))){layMelds(p,[g],false);cardsOf(g).forEach(c=>placed.push(c));grp++;changed=true;}
     }
   }
   const ev=[];
@@ -1115,6 +1116,7 @@ function coreLay(s,ids){
     if(!sel.length)return 'Elige las cartas del juego: '+K.d;
     const ms=matchContract(sel,G.round);
     if(!ms)return 'Esas cartas no arman el juego. '+K.d;
+    if(!canLeave(p,sel))return 'Siempre debes quedarte con una carta para descartar: así se cierra la ronda.';
     layMelds(p,ms,true);
     const tr=!!ms[0].triple,nw=ms[0].cards.length===4?'cuatro':'tres';
     say(p.name+(tr?' bajó '+nw+' comodines como su juego.':' bajó '+K.n.toLowerCase()+'.'),s,tr?'Bajaste '+nw+' comodines como tu juego.':'Bajaste '+K.n.toLowerCase()+'.');
@@ -1129,6 +1131,7 @@ function coreLay(s,ids){
   }
   const g=sel.length>=3?(analyzeSet(sel,false)||analyzeRun(sel)):null;
   if(!g)return 'Otro juego: 3 o más cartas del mismo valor, o una escalera del mismo palo.';
+  if(!canLeave(p,sel))return 'Siempre debes quedarte con una carta para descartar: así se cierra la ronda.';
   layMelds(p,[g],false);
   say(p.name+' bajó otro juego.',s,'Bajaste otro juego.');
   origenesDesde(s,sel);
@@ -1144,6 +1147,7 @@ function coreExtend(s,mi,ids,take){
   if(!sel.length||sel.length!==ids.length)return 'Elige una carta y toca el juego donde va.';
   if(!p.melded)return 'Primero baja el juego de la ronda.';
   if(m.owner===s&&p.meldTurn===G.turnNo)return 'En el turno en que bajas solo puedes agregar a los juegos de los demás. A los tuyos, desde tu próximo turno.';
+  if(!canLeave(p,sel))return 'Siempre debes quedarte con una carta para descartar: así se cierra la ronda.';
   if(take){
     const sw=trySwap(m,sel);
     if(!sw)return 'Ya no se puede hacer ese cambio.';
@@ -1157,7 +1161,7 @@ function coreExtend(s,mi,ids,take){
     if(!p.hand.length)endRound(s);
     return {info:'El comodín es tuyo: úsalo para armar un juego nuevo.'};
   }
-  const rem=p.hand.filter(c=>sel.indexOf(c)<0),goOut=rem.length===0||(rem.length===1&&!rem[0].j);
+  const rem=p.hand.filter(c=>sel.indexOf(c)<0),goOut=rem.length===1&&!rem[0].j;
   let pending=sel.slice(),curM=m,used=[],progress=true;
   while(pending.length&&progress){
     progress=false;
@@ -1188,7 +1192,8 @@ function coreDiscard(s,id){
   afterDiscard();
   return null;
 }
-function jokerClose(p){const h=p.hand;if(h.length===1&&h[0].j)return h[0];if(h.length===2&&h.some(c=>c.j)&&h.some(c=>!c.j))return h.find(c=>c.j);return null;}
+function canLeave(p,cards){return p.hand.some(c=>cards.indexOf(c)<0&&!c.j);}
+function jokerClose(p){const h=p.hand;if(h.length===2&&h.some(c=>c.j)&&h.some(c=>!c.j))return h.find(c=>c.j);return null;}
 function onlyJokers(p){return p.hand.length>0&&p.hand.every(c=>c.j);}
 function corePass(s){
   if(!(G.turn===s&&G.phase==='play'))return 'Espera tu turno.';
@@ -1252,7 +1257,7 @@ function whyNot(m,c){
   if(m.triple)return 'Los comodines bajados como juego van solos: no admiten más cartas.';
   if(c.j){
     if(m.kind==='set'?m.cards.some(x=>x.j):m.seq.some(x=>x.c.j))return 'Ese juego ya tiene un comodín.';
-    return 'El comodín solo se agrega a la mesa para cerrar la ronda: solo se puede si con eso cierras: te queda a lo más una carta para descartar.';
+    return 'El comodín solo se agrega a la mesa para cerrar la ronda: y solo si después te queda una carta para descartar y cerrar.';
   }
   if(m.kind==='set'){
     return 'Ese juego es de '+rankName(m.rank)+': solo admite cartas '+rankName(m.rank)+'.';
@@ -1286,13 +1291,14 @@ function humanHint(){
   if(!myTurn('play')){setMsg(myTurn('draw')?'Primero roba una carta del mazo.':'Espera tu turno.',true);return render();}
   const p=me();
   if(!p.melded){
-    const m=findContract(p.hand,G.round);
+    let m=findContract(p.hand,G.round);
+    if(m&&!canLeave(p,m.reduce((a,x)=>a.concat(cardsOf(x)),[])))m=null;
     if(m){UI.sel=new Set(m.reduce((a,x)=>a.concat(cardsOf(x)),[]).map(c=>c.id));setMsg(m[0].triple?(m[0].cards.length===4?(G.players.every(function(q,i){return i===0||!q.melded;})?'¡Cuatro comodines y nadie ha bajado! Bájalos: es batate.':'¡Tienes cuatro comodines! Valen como el juego: bájalos.'):'¡Tienes tres comodines! Valen como el juego: bájalos.'):'Con estas cartas ya puedes bajar el juego.');}
     else{const d=botPickDiscard(p);if(d){UI.sel=new Set([d.id]);setMsg('Todavía no tienes el juego. Yo descartaría esta carta.');}else setMsg('Solo tienes comodines: pasa el turno.');}
   }else{
     if(jokerClose(p)&&G.melds.some(m=>canExtendJ(p,m,jokerClose(p)))){UI.sel=new Set([jokerClose(p).id]);setMsg('Tu comodín puede cerrar la ronda: toca un juego de la mesa para agregarlo y luego descarta tu última carta.');sfx('tick');return render();}
     for(const c of p.hand){
-      if(G.melds.some(m=>canExtend(p,m,c))){UI.sel=new Set([c.id]);setMsg('Esta carta encaja en la mesa. Toca el juego donde va.');sfx('tick');return render();}
+      if(canLeave(p,[c])&&G.melds.some(m=>canExtend(p,m,c))){UI.sel=new Set([c.id]);setMsg('Esta carta encaja en la mesa. Toca el juego donde va.');sfx('tick');return render();}
     }
     const d=botPickDiscard(p);
     if(d){UI.sel=new Set([d.id]);setMsg('Nada encaja en la mesa. Yo descartaría esta carta.');}
@@ -1956,10 +1962,10 @@ function rulesHTML(){
   '<p>El trío limpio (ronda 1) debe armarse sin comodín y con tres palos distintos. Ya bajado, se le pueden agregar cartas del mismo valor de cualquier palo.</p>'+
   '<p><b>Tres o cuatro comodines:</b> si tienes tres o cuatro comodines, valen como el juego de cualquier ronda. Los bajas en lugar del juego y quedan solos en la mesa, sin que nadie les agregue cartas.</p>'+
   '<h3>Comprar</h3><p>Mientras no hayas bajado, puedes comprar la carta que acaba de descartar otro jugador, y también la primera carta que se voltea al repartir. Cuesta una ficha y te llevas además dos cartas del mazo. El derecho de compra va en orden: primero el jugador que sigue, a la derecha, y así sucesivamente. En la primera ronda no se compra.</p>'+
-  '<h3>Batate</h3><p>Si bajas tu juego y te quedas sin cartas en ese mismo turno, y nadie había bajado antes, es un <b>batate</b>: la ronda termina y los puntos de todos los demás valen doble. Cuenta aunque cierres descartando tu última carta. Con cuatro comodines, si nadie había bajado antes, es batate aunque te queden cartas: la ronda termina de inmediato y los puntos de los demás valen doble. Con tres comodines no cuenta como batate.</p>'+
-  '<h3>Cerrar y contar</h3><p>La ronda termina cuando alguien se queda sin cartas. Los demás suman lo que les quedó. Si el mazo se acaba, se baraja el descarte para seguir. Si aun así se acabara del todo, la ronda termina y todos suman sus cartas.</p>'+
+  '<h3>Batate</h3><p>Si bajas tu juego y cierras en ese mismo turno descartando tu última carta, y nadie había bajado antes, es un <b>batate</b>: la ronda termina y los puntos de todos los demás valen doble. Con cuatro comodines, si nadie había bajado antes, es batate aunque te queden cartas: la ronda termina de inmediato y los puntos de los demás valen doble. Con tres comodines no cuenta como batate.</p>'+
+  '<h3>Cerrar y contar</h3><p>Siempre se cierra descartando: nunca puedes bajar o agregar todas tus cartas a la mesa, siempre te debe quedar una para descartar. Por eso, si te quedan tres cartas que forman un trío, no puedes bajarlas para cerrar. La ronda termina cuando alguien descarta su última carta. Los demás suman lo que les quedó. Si el mazo se acaba, se baraja el descarte para seguir. Si aun así se acabara del todo, la ronda termina y todos suman sus cartas.</p>'+
   '<div class="vals"><div>Del 2 al 9</div><div>5</div><div>Del 10 a la K</div><div>10</div><div>As</div><div>15</div><div>Comodín</div><div>50</div></div>'+
-  '<h3>Comodines</h3><p>El comodín sirve para armar tus juegos: el de la ronda o uno nuevo. No se descarta. Tampoco se agrega a juegos que ya están en la mesa, con una excepción: si con eso cierras la ronda (te quedas sin cartas, o te queda una sola para descartar), puedes agregarlo a un juego de la mesa que no tenga ya un comodín.</p>'+
+  '<h3>Comodines</h3><p>El comodín sirve para armar tus juegos: el de la ronda o uno nuevo. No se descarta. Tampoco se agrega a juegos que ya están en la mesa, con una excepción: si después de agregarlo te queda una sola carta para descartar y cerrar, puedes ponerlo en un juego de la mesa que no tenga ya un comodín.</p>'+
   '<p>Si en la mesa hay un grupo con comodín, por ejemplo 7♠ 7♥ ★, y ya bajaste tu juego, puedes poner dos cartas más de ese número y llevarte el comodín a tu mano.</p>'+
   '<button class="btn pri" data-act="close">Entendido</button></div></div>';
 }
