@@ -370,7 +370,7 @@ safe-buffer/index.js:
 <script>
 (function(){
 'use strict';
-const APP_VER='20261008-6';
+const APP_VER='20261008-7';
 // Busca una versión más nueva en el servidor (el teléfono a veces guarda la vieja) y la carga sola.
 function checkUpdate(){
   if(location.protocol.indexOf('http')!==0||(typeof G!=='undefined'&&G))return;
@@ -687,12 +687,15 @@ const fxl={
   flyBack(from,to,o){flyEl('<span class="back"></span>',rectOf(from),rectOf(to),Object.assign({scale:.32,fade:true,rot:(Math.random()*40-20)},o||{}));},
   flyCard(cid,to,o){const el=qs('[data-cid="'+cid+'"]');if(!el)return;const r=el.getBoundingClientRect();const html=el.outerHTML.replace(/data-cid="[^"]*"/,'').replace(/style="[^"]*"/,'');flyEl(html,r,rectOf(to),Object.assign({scale:.4,fade:true},o||{}));},
   bubble(i,text,o){
-    if(!ANIM)return;o=o||{};
+    o=o||{};
+    if(o.chat&&G&&G.players[i]){UI.chatLog=(UI.chatLog||[]);UI.chatLog.unshift({n:i===0?'Tú':G.players[i].name,c:G.players[i].color,t:String(text)});if(UI.chatLog.length>8)UI.chatLog.length=8;if(UI.modal&&UI.modal.type==='chat'){const l=$('chatlog');if(l)l.innerHTML=chatLogHTML();}}
     const r=rectOf('#av-'+i+' .face');if(!r)return;
+    if(!ANIM&&!o.chat)return;
     const below=i!==0;
     const big=/^[^\p{L}\p{N}]{1,6}$/u.test(String(text).trim());
     const d=fxAdd('bubble '+(below?'dn':'up')+(big?' big':''),esc(text),{left:(r.left+r.width/2)+'px',top:(below?r.bottom+14:r.top-48)+'px'});
     try{const bw=d.offsetWidth,cx=r.left+r.width/2,W=window.innerWidth,nx=Math.min(Math.max(cx,bw/2+6),W-bw/2-6);if(nx!==cx){d.style.left=nx+'px';d.style.setProperty('--tail',(cx-nx)+'px');}}catch(e){}
+    if(!ANIM){setTimeout(function(){d.remove();},(o.dur||1700)+(o.delay||0));return;}
     anim(d,[{scale:'.3',opacity:0},{scale:'1.12',opacity:1,offset:.12},{scale:'1',opacity:1,offset:.2},{scale:'1',opacity:1,offset:.85},{scale:'.9',opacity:0}],{duration:o.dur||1700,delay:o.delay||0,easing:'ease-out',fill:'both'},true);
   },
   banner(small,big,sub,dur){
@@ -2054,6 +2057,7 @@ function chatHTML(){
     '<div class="emos">'+EMOS.map(e=>'<button type="button" data-act="say" data-m="'+e+'">'+e+'</button>').join('')+'</div>'+
     '<div class="frases">'+FRASES.map(t=>'<button type="button" data-act="say" data-m="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>'+
     '<div class="chatrow"><input id="chatin" type="text" maxlength="40" placeholder="Escribe un mensaje corto" autocomplete="off" enterkeyhint="send"><button class="btn pri" data-act="saytxt">Enviar</button></div>'+
+    '<div id="chatlog" style="margin-top:12px">'+chatLogHTML()+'</div>'+
     '<button class="btn" data-act="close">Cerrar</button></div></div>';
 }
 function cleanMsg(t){return String(t==null?'':t).replace(/[\u0000-\u001f<>]/g,'').replace(/\s+/g,' ').trim().slice(0,40);}
@@ -2062,17 +2066,31 @@ function coreSay(s,txt){
   txt=cleanMsg(txt);if(!txt)return;
   const p=G.players[s];if(!p)return;
   const now=Date.now();if(now-(p.lastSay||0)<1200)return;p.lastSay=now;
-  fx.bubble(s,txt,{dur:2800});
+  fx.bubble(s,txt,{dur:3800,chat:1});
   if(s!==0)sfx('tick');
   if(MP.role==='host')mpPush();
-  else if(!MP.role&&Math.random()<.45){later(function(){const o=1+rnd(G.n-1);fx.bubble(o,pick(SAY.chat),{dur:1900});},1000);}
+  else if(!MP.role&&Math.random()<.45){later(function(){const o=1+rnd(G.n-1);fx.bubble(o,pick(SAY.chat),{dur:2400,chat:1});},1000);}
 }
 function chatSend(txt){
-  txt=cleanMsg(txt);if(!txt||!G)return;
-  const now=Date.now();if(now-(UI.lastSay||0)<1200)return;UI.lastSay=now;
+  txt=cleanMsg(txt);
+  if(!txt||!G){const ci=$('chatin');if(ci)ci.focus();return;}
+  const now=Date.now();
+  if(now-(UI.lastSay||0)<1200){setTimeout(function(){chatSend(txt);},1250-(now-UI.lastSay));return;}
+  UI.lastSay=now;
+  // cierra el teclado primero; el mensaje sale cuando la pantalla ya volvió a su tamaño
+  try{if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}catch(e){}
+  const kb=!!(window.visualViewport&&window.visualViewport.height<window.innerHeight-80);
   UI.modal=null;UI.mk=null;render();
-  if(MP.role==='guest'){mpSend({t:'say',m:txt});return;}
-  coreSay(0,txt);
+  setTimeout(function(){
+    if(!G)return;
+    if(MP.role==='guest'){mpSend({t:'say',m:txt});return;}
+    G.players[0].lastSay=0;coreSay(0,txt);
+  },kb?450:60);
+}
+function chatLogHTML(){
+  const l=UI.chatLog||[];
+  if(!l.length)return '';
+  return '<p class="sub" style="margin:4px 0 6px">Últimos mensajes</p>'+l.map(m=>'<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:15px"><b style="color:'+m.c+';flex:none;filter:brightness(.8)">'+esc(m.n)+'</b><span>'+esc(m.t)+'</span></div>').join('');
 }
 function menuHTML(){
   return '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-label="Menú"><h2>Pausa</h2><p class="sub">'+(MP.role?'Mesa '+esc(MP.code)+(MP.role==='host'?'. Si sales, se cierra la mesa para todos.':'. Si sales, una computadora juega por ti.'):'La partida se guarda al terminar cada ronda.')+'</p>'+
