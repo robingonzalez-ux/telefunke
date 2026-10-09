@@ -853,8 +853,19 @@ function layMelds(p,melds,contract){
   p.melded=true;
 }
 function canExtendJ(p,m,c){
+  if(!m||m.kind!=='set'||m.triple)return null;            // solo en tríos/grupos, no en escaleras
+  if(G.players[m.owner]===p&&m.contract)return null;     // nunca en tu juego principal de la ronda
   if(G.players[m.owner]===p&&p.meldTurn===G.turnNo)return null;
   return tryExtendJoker(m,c);
+}
+// cuántos juegos de la mesa pueden recibir un comodín tuyo (uno por juego)
+function jokerSpots(p,skip){let n=0;G.melds.forEach(function(m,i){if(i!==skip&&canExtendJ(p,m,{j:true,id:'?'}))n++;});return n;}
+// el comodín se puede poner en la mesa solo si así cierras: te queda una sola carta normal para descartar
+// y todos los comodines que te quedan también tienen dónde ir
+function jokerCloseOK(p,sel,mi){
+  const rem=p.hand.filter(c=>sel.indexOf(c)<0);
+  const nat=rem.filter(c=>!c.j).length,jk=rem.length-nat;
+  return nat===1&&jk<=jokerSpots(p,mi);
 }
 function canExtend(p,m,c){
   if(G.players[m.owner]===p&&p.meldTurn===G.turnNo)return null;
@@ -1189,7 +1200,11 @@ function coreExtend(s,mi,ids,take){
     if(!p.hand.length)endRound(s);
     return {info:'El comodín es tuyo: úsalo para armar un juego nuevo.'};
   }
-  const rem=p.hand.filter(c=>sel.indexOf(c)<0),goOut=rem.length===1&&!rem[0].j;
+  const selJ=sel.filter(c=>c.j);
+  if(selJ.length>1)return 'Solo puedes poner un comodín en cada juego de la mesa.';
+  if(selJ.length&&!canExtendJ(p,m,selJ[0]))return whyNot(m,selJ[0],p);
+  const goOut=!selJ.length||jokerCloseOK(p,sel,mi);
+  if(!goOut)return 'El comodín solo se pone en la mesa para cerrar: después debe quedarte una sola carta para descartar (y tus otros comodines deben tener dónde ir).';
   let pending=sel.slice(),curM=m,used=[],progress=true;
   while(pending.length&&progress){
     progress=false;
@@ -1221,7 +1236,7 @@ function coreDiscard(s,id){
   return null;
 }
 function canLeave(p,cards){return p.hand.some(c=>cards.indexOf(c)<0&&!c.j);}
-function jokerClose(p){const h=p.hand;if(h.length===2&&h.some(c=>c.j)&&h.some(c=>!c.j))return h.find(c=>c.j);return null;}
+function jokerClose(p){const h=p.hand,j=h.find(c=>c.j);if(!j)return null;let ok=null;G.melds.forEach(function(m,i){if(!ok&&canExtendJ(p,m,j)&&jokerCloseOK(p,[j],i))ok=j;});return ok;}
 function onlyJokers(p){return p.hand.length>0&&p.hand.every(c=>c.j);}
 function corePass(s){
   if(!(G.turn===s&&G.phase==='play'))return 'Espera tu turno.';
@@ -1281,11 +1296,13 @@ function humanSwap(take){
   extendWith(s.mi,s.ids,!!take);
 }
 function rankName(r){return ({1:'As',11:'J',12:'Q',13:'K'})[r]||String(r);}
-function whyNot(m,c){
+function whyNot(m,c,p){
   if(m.triple)return 'Los comodines bajados como juego van solos: no admiten más cartas.';
   if(c.j){
-    if(m.kind==='set'?m.cards.some(x=>x.j):m.seq.some(x=>x.c.j))return 'Ese juego ya tiene un comodín.';
-    return 'El comodín solo se agrega a la mesa para cerrar la ronda: y solo si después te queda una carta para descartar y cerrar.';
+    if(m.kind!=='set')return 'El comodín no se pone en escaleras de la mesa: solo en tríos o grupos.';
+    if(m.cards.some(x=>x.j))return 'Ese juego ya tiene un comodín.';
+    if(p&&G.players[m.owner]===p&&m.contract)return 'El comodín no se pone en tu juego principal de la ronda.';
+    return 'El comodín solo se pone en la mesa para cerrar: después debe quedarte una sola carta para descartar.';
   }
   if(m.kind==='set'){
     return 'Ese juego es de '+rankName(m.rank)+': solo admite cartas '+rankName(m.rank)+'.';
@@ -1995,7 +2012,7 @@ function rulesHTML(){
   '<h3>Batate</h3><p>Si bajas tu juego y cierras en ese mismo turno descartando tu última carta, y nadie había bajado antes, es un <b>batate</b>: la ronda termina y los puntos de todos los demás valen doble. Con cuatro comodines, si nadie había bajado antes, es batate aunque te queden cartas: la ronda termina de inmediato y los puntos de los demás valen doble. Con tres comodines no cuenta como batate.</p>'+
   '<h3>Cerrar y contar</h3><p>Siempre se cierra descartando: nunca puedes bajar o agregar todas tus cartas a la mesa, siempre te debe quedar una para descartar. Por eso, si te quedan tres cartas que forman un trío, no puedes bajarlas para cerrar. La ronda termina cuando alguien descarta su última carta. Los demás suman lo que les quedó. Si el mazo se acaba, se baraja el descarte para seguir. Si aun así se acabara del todo, la ronda termina y todos suman sus cartas.</p>'+
   '<div class="vals"><div>Del 2 al 9</div><div>5</div><div>Del 10 a la K</div><div>10</div><div>As</div><div>15</div><div>Comodín</div><div>50</div></div>'+
-  '<h3>Comodines</h3><p>El comodín sirve para armar tus juegos: el de la ronda o uno nuevo. No se descarta. Tampoco se agrega a juegos que ya están en la mesa, con una excepción: si después de agregarlo te queda una sola carta para descartar y cerrar, puedes ponerlo en un juego de la mesa que no tenga ya un comodín.</p>'+
+  '<h3>Comodines</h3><p>El comodín sirve para armar tus juegos: el de la ronda o uno nuevo. No se descarta. Tampoco se agrega a juegos que ya están en la mesa, con una excepción: para cerrar la ronda puedes poner tus comodines en tríos o grupos de la mesa (no en escaleras), de cualquier jugador, menos en tu juego principal de la ronda. Uno por juego, y solo en juegos que no tengan ya un comodín. Vale únicamente si con eso te quedas sin cartas: después de ponerlos te debe quedar una sola carta, que descartas para cerrar.</p>'+
   '<p>Si en la mesa hay un grupo con comodín, por ejemplo 7♠ 7♥ ★, y ya bajaste tu juego, puedes poner dos cartas más de ese número y llevarte el comodín a tu mano.</p>'+
   '<button class="btn pri" data-act="close">Entendido</button></div></div>';
 }
