@@ -370,7 +370,7 @@ safe-buffer/index.js:
 <script>
 (function(){
 'use strict';
-const APP_VER='20261009-1';
+const APP_VER='20261016-1';
 // Busca una versión más nueva en el servidor (el teléfono a veces guarda la vieja) y la carga sola.
 function checkUpdate(){
   if(location.protocol.indexOf('http')!==0||(typeof G!=='undefined'&&G))return;
@@ -641,7 +641,7 @@ function keepScore(c,h,idx){
 
 // ---------- estado ----------
 let G=null;
-const UI={cfg:{name:'Tú',bots:3,chips:12,time:0,lift:null,v:2},sel:new Set(),sort:'palo',msg:'',err:false,modal:null,buy:null,saved:null,origins:{},mk:null,bk:null,shake:false,
+const UI={cfg:{name:'Tú',bots:3,chips:12,time:0,lift:null,v:2,lvl:1,coach:1},sel:new Set(),sort:'palo',msg:'',err:false,modal:null,buy:null,saved:null,origins:{},mk:null,bk:null,shake:false,
   screen:'start',mp:{code:''},mpmsg:'',mpTotal:4,handOrder:[],buyAck:null};
 const MP={role:null,room:null,code:'',cid:'',avail:null,lobby:null,lobbyG:null,subs:[],seq:0,rid:0,evId:0,evq:[],evSent:0,og:{},sentJs:{},last:{},
   pushT:null,hbT:null,watchT:null,helloT:null,findT:null,hostPeer:null,lastSeq:-1,lastRid:-1,lastEv:0,lastErr:0,hostSeen:0,actN:Date.now(),msgN:0,lost:false,wl:null};
@@ -886,6 +886,7 @@ function botDraw(p){
   render();
   later(function(){botPlay(p);},750+rnd(400));
 }
+function LV(p){if(p&&p.lvl!=null)return p.lvl;return (G&&G.cfg&&G.cfg.lvl!=null)?G.cfg.lvl:1;}
 function botPlay(p){
   if(G.over)return;
   const i=G.players.indexOf(p);
@@ -893,6 +894,7 @@ function botPlay(p){
   if(!p.melded){
     let m=findContract(p.hand,G.round);
     if(m&&!canLeave(p,m.reduce((a,x)=>a.concat(cardsOf(x)),[])))m=null;
+    if(m&&LV(p)===0&&Math.random()<.4)m=null; // fácil: a veces no se da cuenta de que ya tiene el juego
     if(m){layMelds(p,m,true);didContract=true;m.forEach(x=>cardsOf(x).forEach(c=>placed.push(c)));}
   }
   let off=0,grp=0,swaps=0;
@@ -900,6 +902,7 @@ function botPlay(p){
     let changed=true,guard=0;
     while(changed&&guard++<40&&p.hand.length>1){
       changed=false;
+      if(LV(p)===0&&Math.random()<.35)break;
       if(jokerClose(p)){
         const jc=jokerClose(p);
         for(let mi=0;mi<G.melds.length;mi++){
@@ -913,7 +916,7 @@ function botPlay(p){
         if(m.kind!=='set'||m.triple||!m.cards.some(x=>x.j))continue;
         if(G.players[m.owner]===p&&p.meldTurn===G.turnNo)continue;
         const two=p.hand.filter(c=>!c.j&&c.r===m.rank).slice(0,2);
-        if(two.length<2||!canLeave(p,two))continue;
+        if(two.length<2||!canLeave(p,two)||LV(p)===0)continue;
         const sw=trySwap(m,two);if(!sw)continue;
         const h2=p.hand.filter(c=>two.indexOf(c)<0).concat([sw.joker]);
         const g=extraGroup(h2);
@@ -976,12 +979,44 @@ function danger(p,c){
   }
   return d;
 }
+function hardP(){return Object.assign({bt:0,bp:.9,dg:1,rk:.5,pd:25,dead:.5,mw:6,kw:.5,mb:1},(typeof window!=='undefined'&&window.__HP)||{});}
+// cuántas cartas de ese valor ya se botaron (si ya salieron muchas, es difícil completar trío con ella)
+function deadness(c){let n=0;for(const k in G.seen.disc)(G.seen.disc[k]||[]).forEach(b=>{if(!b.j&&b.r===c.r)n++;});return n;}
+// cuántas cartas le faltan a una mano para completar el juego de la ronda (aproximado)
+function missingFor(hand,idx){
+  const K=CONTRACTS[idx],nat=hand.filter(c=>!c.j),jk=Math.min(hand.length-nat.length,K.jmax);
+  let miss=0;
+  const sets=K.req.filter(q=>q.k==='set').map(q=>q).sort((a,b)=>b.n-a.n);
+  if(sets.length){
+    const by={};nat.forEach(c=>{(by[c.r]=by[c.r]||[]).push(c);});
+    const cnt=Object.keys(by).map(r=>sets[0].pure?new Set(by[r].map(c=>c.s)).size:by[r].length).sort((a,b)=>b-a);
+    sets.forEach((q,i)=>{miss+=Math.max(0,q.n-(cnt[i]||0));});
+  }
+  K.req.filter(q=>q.k==='run').forEach(q=>{
+    let best=0;
+    SUITS.forEach(s=>{const have=new Set(nat.filter(c=>c.s===s).map(c=>c.r));if(have.has(1))have.add(14);
+      for(let st=1;st+q.n-1<=14;st++){let k=0;for(let r=st;r<st+q.n;r++)if(have.has(r))k++;if(k>best)best=k;}});
+    miss+=q.n-best;
+  });
+  return Math.max(0,miss-jk);
+}
 function botPickDiscard(p){
   const h=p.hand.filter(c=>!c.j);
   if(!h.length)return null;
   let best=null,bs=Infinity;
+  const lv=LV(p);
+  if(lv===0&&p.bot&&Math.random()<.35)return h[rnd(h.length)];
+  // ¿alguien ya bajó y está por cerrar? entonces conviene botar las cartas que más puntos valen
+  const rush=G.players.some(function(q){return q!==p&&q.melded&&q.hand.length<=3;});
   h.forEach(function(c){
-    const s=p.melded?(-pts(c)/10+danger(p,c)*.6):(keepScore(c,p.hand,G.round)-pts(c)/40+danger(p,c)*.8);
+    let s;
+    if(lv===0&&p.bot)s=p.melded?-pts(c)/10:keepScore(c,p.hand,G.round)-pts(c)/40;
+    else if(lv===2&&p.bot){
+      const H=hardP();
+      if(p.melded)s=-pts(c)/8+danger(p,c)*1.2;
+      else{const rest=p.hand.filter(x=>x!==c);s=missingFor(rest,G.round)*H.mw+keepScore(c,p.hand,G.round)*H.kw-pts(c)/(rush?8:H.pd)+danger(p,c)*H.dg-H.dead*deadness(c);}
+    }
+    else s=p.melded?(-pts(c)/10+danger(p,c)*.6):(keepScore(c,p.hand,G.round)-pts(c)/40+danger(p,c)*.8);
     if(s<bs){bs=s;best=c;}
   });
   return best;
@@ -1004,8 +1039,12 @@ function botWantsBuy(q,card){
   if(q.melded||q.chips<=0||!K.buy)return false;
   if(card.j)return K.jmax>0?true:Math.random()<0.2;
   const sc=keepScore(card,q.hand.concat([card]),G.round);
-  const th=G.round>=5?3:4;
-  return sc>=th&&(q.chips>2||G.round>=5)&&Math.random()<0.75;
+  const lv=LV(q);
+  const H=hardP();
+  if(lv===2&&H.mb){const before=missingFor(q.hand,G.round),after=missingFor(q.hand.concat([card]),G.round);return after<before&&(q.chips>2||G.round>=5||after<=1);}
+  const th=(G.round>=5?3:4)+(lv===0?1:lv===2?H.bt:0);
+  const pr=lv===0?.4:lv===2?H.bp:.75;
+  return sc>=th&&(q.chips>2||G.round>=5)&&Math.random()<pr;
 }
 
 // ---------- descarte y compras ----------
@@ -1886,6 +1925,8 @@ function startHTML(){
     '<p class="tagline">El juego de cartas de la mesa familiar, con las reglas de Ecuador.</p>'+
     '<div class="fld"><label for="nm">Tu nombre</label><input id="nm" type="text" maxlength="14" value="'+esc(c.name)+'" autocomplete="off"></div>'+
     '<div class="fld"><span>Rivales</span>'+seg('bots',[2,3,4],v=>v)+'</div>'+
+    '<div class="fld"><span>Dificultad</span>'+seg('lvl',[0,1,2],v=>['Fácil','Normal','Difícil'][v])+'<p class="hint">'+['Las computadoras se equivocan y compran poco: ideal para aprender.','Juegan bien, como en una mesa familiar.','Juegan para ganar: piensan cada carta, compran solo lo que les sirve y no te regalan cartas.'][c.lvl==null?1:c.lvl]+'</p></div>'+
+    '<div class="fld"><span>Consejos mientras juegas</span>'+seg('coach',[1,0],v=>v?'Sí':'No')+'<p class="hint">Te avisa cuándo te conviene comprar, cuándo ya tienes el juego y si una carta es peligrosa de botar.</p></div>'+
     '<div class="fld"><span>Fichas para comprar</span>'+seg('chips',[7,12],v=>v)+'<p class="hint">En Ecuador se juega con 12.</p></div>'+
     '<div class="fld"><span>Tiempo para decidir una compra</span>'+seg('time',[0,10,20],v=>v?v+' segundos':'Sin límite')+'<p class="hint">Sin límite, el juego te espera mientras revisas tu mano.</p></div>'+
     '<button class="btn pri" data-act="new">Repartir</button>'+
@@ -1912,13 +1953,37 @@ function meldHTML(m,mi){
   return '<button type="button" class="meld'+(tap?' tap':'')+'" data-act="meld" data-i="'+mi+'" style="--c:'+G.players[m.owner].color+'" aria-label="Juego de '+esc(G.players[m.owner].name)+'">'+cards+'</button>';
 }
 function waitingSeat(){return G.mirror?(G.wb==null?-1:G.wb):(G.rbuy?G.rbuy.seat:(UI.buy?0:-1));}
+function coachCard(p,c){
+  if(!c||c.j)return '';
+  if(p.melded&&G.melds.some(m=>canExtend(p,m,c))&&canLeave(p,[c]))return '💡 Esa carta entra en un juego de la mesa: mejor agrégala que botarla.';
+  if(!G.mirror&&G.seen){
+    let who='',d=0;
+    for(let k=1;k<G.n;k++){const oi=(G.players.indexOf(p)+k)%G.n,o=G.players[oi];if(o.melded||o.chips<=0)continue;
+      if((G.seen.bought[oi]||[]).some(b=>!b.j&&(b.r===c.r||(CONTRACTS[G.round].req.some(q=>q.k==='run')&&b.s===c.s&&dist(b,c)<=2)))){who=o.name;d++;}}
+    if(who)return '⚠️ Ojo: '+who+' compró cartas parecidas; botar esta le puede servir.';
+  }
+  if(!p.melded&&keepScore(c,p.hand,G.round)>=4)return '🤔 Esa carta te sirve para el juego de la ronda. ¿Seguro que la quieres botar?';
+  if(pts(c)>=10&&G.players.some(q=>q!==p&&q.melded&&q.hand.length<=3))return '💡 Alguien está por cerrar: botar cartas altas como esta te ahorra puntos.';
+  return '';
+}
+function coachBuy(card){
+  const p=me();if(!p)return '';
+  if(card.j)return '👍 Es un comodín: te ayuda a armar tu juego.';
+  const sc=keepScore(card,p.hand.concat([card]),G.round);
+  const same=p.hand.filter(x=>!x.j&&x.r===card.r).length;
+  let t=sc>=4?'👍 Te conviene: '+(same>=1?'ya tienes '+same+' carta'+(same>1?'s':'')+' de ese valor.':'te acerca al juego de la ronda.'):sc>=2?'🤔 Puede servirte, pero piensa si vale una ficha.':'👎 No te ayuda mucho para el juego de esta ronda.';
+  if(p.chips<=3&&G.round<5&&sc<4)t+=' Te quedan pocas fichas: guárdalas para las rondas difíciles.';
+  return t;
+}
 function statusText(){
   if(UI.msg)return {t:UI.msg,err:UI.err};
   const p=me();
   if(myTurn('draw'))return {t:'Toca el mazo para robar'};
   if(myTurn('play')){
     const n=UI.sel.size;
+    if(n===1&&UI.cfg.coach){const tip=coachCard(p,selCards()[0]);if(tip)return {t:tip};}
     if(n)return {t:n+(n===1?' carta elegida · arrástrala':' cartas elegidas · arrástralas')+' a la mesa'};
+    if(UI.cfg.coach&&!p.melded){const m=findContract(p.hand,G.round);if(m&&canLeave(p,m.reduce((a,x)=>a.concat(cardsOf(x)),[])))return {t:'💡 ¡Ya tienes el juego de la ronda! Toca Pista para verlo.'};}
     if(p.melded&&jokerClose(p)&&G.melds.some(m=>canExtendJ(p,m,jokerClose(p))))return {t:'Tu comodín puede cerrar la ronda: elígelo y toca un juego de la mesa'};
     return {t:p.melded?'Agrega a la mesa, baja otro juego o descarta':'Elige cartas para bajar, o descarta una'};
   }
@@ -1998,7 +2063,7 @@ function buyHTML(){
   if(!UI.buy)return '';
   const b=UI.buy;
   return '<div class="buy" role="dialog" aria-label="Comprar descarte"><div class="row"><div class="cc">'+cardHTML(b.card)+'</div>'+
-    '<div><h3>¿Compras '+cardShort(b.card)+'?</h3><p>'+(b.from?esc(b.from)+' lo descartó.':'Es la primera carta del descarte.')+' Cuesta 1 ficha y te llevas 2 cartas más. Revisa tu mano con calma.</p></div></div>'+
+    '<div><h3>¿Compras '+cardShort(b.card)+'?</h3><p>'+(b.from?esc(b.from)+' lo descartó.':'Es la primera carta del descarte.')+' Cuesta 1 ficha y te llevas 2 cartas más. Revisa tu mano con calma.</p>'+(UI.cfg.coach?'<p style="margin-top:6px;font-weight:700;color:var(--sheet-ink)">'+esc(coachBuy(b.card))+'</p>':'')+'</div></div>'+
     '<div class="acts"><button class="btn" data-act="buyno">Paso</button><button class="btn pri" data-act="buyyes">¡Compro!</button></div>'+
     (b.dur?'<div class="bar"><i id="buyfill" style="width:'+Math.max(0,100-(Date.now()-b.t0)*100/b.dur)+'%"></i></div>':'')+'</div>';
 }
@@ -2009,6 +2074,7 @@ function rulesHTML(){
   '<h3>Tu turno</h3><p><b>Con el dedo:</b> arrastra el mazo hacia tu mano para robar; arrastra cartas de tu mano a un juego de la mesa para agregarlas, al descarte para descartar, o a la mesa para bajar un juego. Si eliges varias cartas antes, se mueven juntas.</p><p>Toca el mazo para robar. Elige cartas de tu mano y toca <b>Bajar juego</b>: la primera vez tiene que ser exactamente el juego de la ronda. Ya bajado, elige una carta y toca un juego de la mesa para agregarla, o baja juegos nuevos de 3 o más cartas. En el turno en que bajas solo puedes agregar a los juegos de los demás; desde tu siguiente turno, a cualquiera, también a los tuyos. Terminas descartando una carta. Los comodines no se descartan: solo se usan en juegos. Si solo te quedan comodines y no entran en la mesa, pasas el turno.</p>'+
   '<p>El trío limpio (ronda 1) debe armarse sin comodín y con tres palos distintos. Ya bajado, se le pueden agregar cartas del mismo valor de cualquier palo.</p>'+
   '<p><b>Tres o cuatro comodines:</b> si tienes tres o cuatro comodines, valen como el juego de cualquier ronda. Los bajas en lugar del juego y quedan solos en la mesa, sin que nadie les agregue cartas.</p>'+
+  '<h3>Consejos para ganar</h3><ol><li>Bota primero las cartas altas (10, J, Q, K y As) que no te sirven: son las que más puntos suman si te quedan en la mano.</li><li>Guarda lo que pide la ronda: pares y tríos cuando son tríos o cuartetos, y cartas seguidas del mismo palo cuando hay escalera.</li><li>Fíjate qué compran los demás y no botes cartas del mismo valor (o seguidas del mismo palo): les estarías regalando el juego.</li><li>Compra cuando la carta completa o casi completa tu juego. No gastes fichas en cartas sueltas al inicio: las rondas 5, 6 y 7 son las difíciles.</li><li>Cuando alguien ya bajó y le quedan pocas cartas, deshazte rápido de tus cartas de más puntos.</li><li>Un comodín vale 50 si te queda en la mano: úsalo pronto para bajar tu juego.</li></ol>'+
   '<h3>Comprar</h3><p>Mientras no hayas bajado, puedes comprar la carta que acaba de descartar otro jugador, y también la primera carta que se voltea al repartir. Cuesta una ficha y te llevas además dos cartas del mazo. El derecho de compra va en orden: primero el jugador que sigue, a la derecha, y así sucesivamente. En la primera ronda no se compra.</p>'+
   '<h3>Batate</h3><p>Si bajas tu juego y cierras en ese mismo turno descartando tu última carta, y nadie había bajado antes, es un <b>batate</b>: la ronda termina y los puntos de todos los demás valen doble. Con cuatro comodines, si nadie había bajado antes, es batate aunque te queden cartas: la ronda termina de inmediato y los puntos de los demás valen doble. Con tres comodines no cuenta como batate.</p>'+
   '<h3>Cerrar y contar</h3><p>Siempre se cierra descartando: nunca puedes bajar o agregar todas tus cartas a la mesa, siempre te debe quedar una para descartar. Por eso, si te quedan tres cartas que forman un trío, no puedes bajarlas para cerrar. La ronda termina cuando alguien descarta su última carta. Los demás suman lo que les quedó. Si el mazo se acaba, se baraja el descarte para seguir. Si aun así se acabara del todo, la ronda termina y todos suman sus cartas.</p>'+
